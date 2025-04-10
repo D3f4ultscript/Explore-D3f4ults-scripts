@@ -404,13 +404,19 @@ button:hover, .button:hover {
 /* Responsive Adjustments */
 @media (max-width: 768px) {
     button, .button, .glow-button, .url-button, .script-button {
-        padding: 0.6rem 1.2rem;
-        font-size: 0.9rem;
-        min-width: 110px;
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
     }
     
     .input-group {
         flex-direction: column;
+        gap: 0.75rem;
+    }
+    
+    nav a {
+        margin: 0.25rem;
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
     }
 }
 
@@ -1297,4 +1303,69 @@ nav a::after {
 .container, nav, #items-container {
     position: relative;
     z-index: 1;
+}
+
+/* New Websites Page Styling */
+#websites-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    max-width: 800px;
+    margin: 2rem auto;
+}
+
+.website-card {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    backdrop-filter: blur(15px);
+    padding: 2rem;
+    border-radius: var(--border-radius);
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    text-align: center;
+}
+
+.website-card:hover {
+    border-color: rgba(59, 130, 246, 0.6);
+    transform: translateY(-4px);
+    background: rgba(15, 23, 42, 0.8);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2), 0 0 15px rgba(59, 130, 246, 0.2);
+}
+
+.website-card h2 {
+    font-size: 1.8rem;
+    margin-bottom: 1rem;
+    color: var(--primary-color);
+    font-family: 'Space Grotesk', sans-serif;
+}
+
+.website-card p {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+}
+
+.website-card .button-container {
+    margin-top: auto;
+}
+
+.website-card .glow-button {
+    min-width: 200px;
+    text-decoration: none;
+}
+
+/* Responsive adjustments */
+@media (min-width: 768px) {
+    #websites-container {
+        flex-direction: row;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .website-card {
+        width: 45%;
+        min-height: 250px;
+    }
 } 

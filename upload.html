@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Upload page - Upload new scripts">
+    <title>D3f4ult - Upload</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="upload-page">
+    <!-- Animated Background -->
+    <div class="animated-bg">
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="circle"></div>
+        <div class="circle"></div>
+        <div class="line"></div>
+        <div class="line"></div>
+    </div>
+
+    <nav>
+        <a href="index.html">Home</a>
+        <a href="upload.html" class="active">Upload</a>
+    </nav>
+
+    <div class="container">
+        <div class="upload-warning">
+            Upload restricted to D3f4ult and authorized staff only
+        </div>
+        
+        <div id="admin-auth">
+            <h2>Admin Access</h2>
+            <div class="input-group">
+                <input type="password" id="admin-key" placeholder="Enter Key:">
+                <button onclick="checkAdminKey()" class="glow-button">Login</button>
+            </div>
+        </div>
+
+        <div id="upload-form" style="display: none;">
+            <h2>New Upload</h2>
+            <form id="item-form">
+                <div class="form-group">
+                    <label for="name">Script Name (max 30 characters)</label>
+                    <input type="text" id="name" required class="modern-input" maxlength="30">
+                </div>
+                <div class="form-group">
+                    <label for="image">Preview Image</label>
+                    <input type="file" id="image" accept="image/*" required class="modern-input">
+                </div>
+                <div class="form-group">
+                    <label for="url">Download URL</label>
+                    <input type="url" id="url" required class="modern-input">
+                </div>
+                <div class="form-group">
+                    <label for="script">Script Code</label>
+                    <textarea id="script" required class="modern-input"></textarea>
+                </div>
+                <button type="submit" class="glow-button">Upload Script</button>
+            </form>
+        </div>
+
+        <div id="admin-items" style="display: none;">
+            <h2>Content Management</h2>
+            <div class="search-container admin-search">
+                <input type="text" class="search-bar" id="admin-search-input" placeholder="Search uploads...">
+            </div>
+            <div id="admin-items-container">
+                <!-- Admin items will be displayed here -->
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 

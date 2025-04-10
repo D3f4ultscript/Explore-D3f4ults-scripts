@@ -161,7 +161,7 @@ function displayItems(searchTerm = '') {
                 <h3 title="${item.name}">${displayName}</h3>
                 <div class="card-buttons">
                     <button class="url-button" onclick="window.open('${item.url}', '_blank')">GO TO URL</button>
-                    <button class="script-button" onclick="copyScript('${item.script.replace(/'/g, "\\'")}')">COPY SCRIPT</button>
+                    <button class="script-button" data-script-id="${item.id}">COPY SCRIPT</button>
                 </div>
             `;
             
@@ -188,6 +188,14 @@ function displayItems(searchTerm = '') {
             </div>
         `;
     }
+    
+    // Add event listeners for script copy buttons
+    document.querySelectorAll('.script-button').forEach(button => {
+        button.addEventListener('click', function() {
+            const scriptId = this.getAttribute('data-script-id');
+            copyScript(scriptId);
+        });
+    });
 }
 
 // Display items in admin section
@@ -245,8 +253,17 @@ function deleteItem(id) {
 }
 
 // Copy script to clipboard
-function copyScript(script) {
-    navigator.clipboard.writeText(script)
+function copyScript(scriptId) {
+    // Get the script content from localStorage using the ID
+    const items = JSON.parse(localStorage.getItem('items') || '[]');
+    const item = items.find(item => item.id === parseInt(scriptId));
+    
+    if (!item) {
+        alert('Script not found!');
+        return;
+    }
+    
+    navigator.clipboard.writeText(item.script)
         .then(() => alert('Script copied to clipboard!'))
         .catch(err => alert('Error copying script: ' + err));
 }

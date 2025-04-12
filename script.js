@@ -1,87 +1,52 @@
-// Admin key
-const ADMIN_KEY = '123';
-
 // Global variable to store current editing item
 let currentEditingItem = null;
 
-// Check admin key
-function checkAdminKey() {
-    const keyInput = document.getElementById('admin-key');
-    const uploadForm = document.getElementById('upload-form');
-    const adminAuth = document.getElementById('admin-auth');
-    const adminItems = document.getElementById('admin-items');
-
-    if (keyInput.value === ADMIN_KEY) {
-        uploadForm.style.display = 'block';
-        adminAuth.style.display = 'none';
-        if (adminItems) {
-            adminItems.style.display = 'block';
-            displayAdminItems();
-            
-            // Set up admin search functionality
-            const adminSearchInput = document.getElementById('admin-search-input');
-            if (adminSearchInput) {
-                adminSearchInput.addEventListener('input', function(e) {
-                    displayAdminItems(e.target.value.toLowerCase());
-                });
-            }
-        }
-    } else {
-        alert('Wrong admin key!');
+// Generate or get device ID
+function getDeviceId() {
+    let deviceId = localStorage.getItem('deviceId');
+    if (!deviceId) {
+        deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('deviceId', deviceId);
     }
+    return deviceId;
+}
+
+// Profile Management
+const profilePicture = document.getElementById('profile-picture');
+const profilePictureInput = document.getElementById('profile-picture-input');
+const profileNameInput = document.getElementById('profile-name');
+const profileStatus = document.getElementById('profile-status');
+const saveProfileBtn = document.getElementById('save-profile-btn');
+
+// Store used names and last name change timestamp
+let usedNames = JSON.parse(localStorage.getItem('usedNames') || '[]');
+let lastNameChange = parseInt(localStorage.getItem('lastNameChange') || '0');
+let lastUpload = parseInt(localStorage.getItem('lastUpload') || '0');
+const NAME_CHANGE_COOLDOWN = 120000; // 2 minutes in milliseconds
+const UPLOAD_COOLDOWN = 600000; // 10 minutes in milliseconds
+
+// Temporary storage for unsaved changes
+let tempProfilePicture = null;
+let tempProfileName = null;
+
+// Add profanity filter function
+const bannedWords = [
+    'arsch', 'hurensohn', 'hure', 'fotze', 'schlampe', 'bastard', 'wichser', 'schwuchtel',
+    'spast', 'idiot', 'depp', 'fick', 'scheiße', 'kacke', 'pimmel', 'penis', 'nutte'
+];
+
+function containsProfanity(text) {
+    const lowerText = text.toLowerCase();
+    return bannedWords.some(word => lowerText.includes(word));
 }
 
 // Add HTML for modal to the document body
 document.addEventListener('DOMContentLoaded', function() {
-    // Create modal HTML
-    const modalHTML = `
-        <div id="edit-modal" class="modal-overlay" style="display: none;">
-            <div class="modal">
-                <h2>Edit Script</h2>
-                <form id="edit-form">
-                    <div class="form-group">
-                        <label for="edit-name">Script Name (max 30 characters)</label>
-                        <input type="text" id="edit-name" required class="modern-input" maxlength="30">
-                    </div>
-                    <div class="form-group">
-                        <label for="edit-image">Preview Image</label>
-                        <input type="file" id="edit-image" accept="image/*" class="modern-input">
-                        <div class="current-image">
-                            <p>Current Image:</p>
-                            <img id="current-image-preview" src="" alt="Current Image" style="max-width: 200px; margin-top: 10px;">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="edit-url">Download URL</label>
-                        <input type="url" id="edit-url" required class="modern-input">
-                    </div>
-                    <div class="form-group">
-                        <label for="edit-script">Script Code</label>
-                        <textarea id="edit-script" required class="modern-input" style="min-height: 150px;"></textarea>
-                    </div>
-                    <div class="button-container">
-                        <button type="button" class="cancel-button" onclick="closeEditModal()">CANCEL</button>
-                        <button type="submit" class="save-button">SAVE SCRIPT</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    `;
+    // Ensure we have a device ID
+    getDeviceId();
     
-    // Add modal to the document
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
-    
-    // Add submit event listener to the edit form
-    const editForm = document.getElementById('edit-form');
-    if (editForm) {
-        editForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            saveEditedItem();
-        });
-    }
-
-    const itemForm = document.getElementById('item-form');
     const searchInput = document.getElementById('search-input');
+    const itemForm = document.getElementById('item-form');
 
     if (searchInput) {
         searchInput.addEventListener('input', function(e) {
@@ -93,42 +58,91 @@ document.addEventListener('DOMContentLoaded', function() {
         itemForm.addEventListener('submit', function(e) {
             e.preventDefault();
 
-            const name = document.getElementById('name').value;
-            const imageFile = document.getElementById('image').files[0];
-            const url = document.getElementById('url').value;
-            const script = document.getElementById('script').value;
-
-            if (!imageFile) {
-                alert('Please select an image!');
+            // Check if profile is complete first
+            if (!checkProfileBeforeUpload()) {
                 return;
             }
+
+            // Check upload cooldown only if not D3f4ult
+            const currentUser = localStorage.getItem('profileName');
+            const now = Date.now();
+            const timeSinceLastUpload = now - lastUpload;
+            
+            if (currentUser !== "D3f4ult" && timeSinceLastUpload < UPLOAD_COOLDOWN) {
+                const remainingTime = formatTimeRemaining(UPLOAD_COOLDOWN - timeSinceLastUpload);
+                alert(`Du kannst nur alle 10 Minuten ein Script hochladen. Bitte warte noch ${remainingTime}.`);
+                return;
+            }
+
+            const name = document.getElementById('name').value;
+            const imageFile = document.getElementById('image').files[0];
+            const gameId = document.getElementById('url').value;
+            const script = document.getElementById('script').value;
+
+            // Check if script name already exists
+            const existingItems = JSON.parse(localStorage.getItem('items') || '[]');
+            if (existingItems.some(item => item.name.toLowerCase() === name.toLowerCase())) {
+                alert('Ein Script mit diesem Namen existiert bereits. Bitte wähle einen anderen Namen.');
+                return;
+            }
+
+            // Validate Game ID
+            if (isNaN(gameId) || gameId <= 0) {
+                alert('Bitte gib eine gültige Roblox Game ID ein!');
+                return;
+            }
+
+            // Check name length
+            if (name.length > 40) {
+                alert('Der Scriptname darf maximal 40 Zeichen lang sein.');
+                return;
+            }
+
+            // Check for profanity in script name
+            if (containsProfanity(name)) {
+                alert('Der Scriptname enthält unangemessene Wörter. Bitte wähle einen anderen Namen.');
+                return;
+            }
+
+            if (!imageFile) {
+                alert('Bitte wähle ein Bild aus!');
+                return;
+            }
+
+            // Get current profile data and device ID
+            const uploaderName = localStorage.getItem('profileName');
+            const uploaderPicture = localStorage.getItem('profilePicture');
+            const deviceId = getDeviceId();
 
             // Convert image to base64
             const reader = new FileReader();
             reader.onload = function(e) {
                 // Create a new item object
                 const item = {
-                    id: Date.now(), // Unique ID for each item
+                    id: Date.now(),
                     name: name,
-                    image: e.target.result, // Base64 image
-                    url: url,
+                    image: e.target.result,
+                    url: gameId,
                     script: script,
-                    date: new Date().toISOString()
+                    date: new Date().toISOString(),
+                    uploader: {
+                        name: uploaderName,
+                        picture: uploaderPicture,
+                        deviceId: deviceId
+                    }
                 };
 
                 // Save to localStorage
-                let items = JSON.parse(localStorage.getItem('items') || '[]');
-                items.push(item);
-                localStorage.setItem('items', JSON.stringify(items));
+                existingItems.push(item);
+                localStorage.setItem('items', JSON.stringify(existingItems));
+                
+                // Update last upload time
+                localStorage.setItem('lastUpload', now.toString());
+                lastUpload = now;
 
                 // Reset form
                 itemForm.reset();
-                alert('Item uploaded successfully!');
-                
-                // Update admin items display if visible
-                if (document.getElementById('admin-items')) {
-                    displayAdminItems();
-                }
+                alert('Script erfolgreich hochgeladen!');
             };
             reader.readAsDataURL(imageFile);
         });
@@ -136,7 +150,102 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Display items on home page
     displayItems();
+
+    // Load profile
+    loadProfile();
+    
+    // Add profile check to upload page
+    if (window.location.pathname.includes('upload.html')) {
+        if (!checkProfileBeforeUpload()) {
+            return;
+        }
+    }
 });
+
+function formatScriptName(name) {
+    let formattedName = '';
+    for (let i = 0; i < name.length; i++) {
+        formattedName += name[i];
+        if ((i + 1) % 20 === 0 && i !== name.length - 1) {
+            formattedName += '\n';
+        }
+    }
+    return formattedName;
+}
+
+// Function to convert Game ID to Roblox URL
+function getRobloxGameUrl(gameId) {
+    return `https://www.roblox.com/games/${gameId}`;
+}
+
+// Add modal container to body
+document.body.insertAdjacentHTML('beforeend', `
+    <div class="detail-modal-overlay" style="display: none;">
+        <div class="detail-modal">
+            <button class="detail-close">Home</button>
+            <div class="detail-modal-content">
+                <img class="detail-image" src="" alt="Script preview">
+                <h2 class="detail-title"></h2>
+                <div class="detail-section">
+                    <h3>Roblox Game ID</h3>
+                    <div class="detail-url"></div>
+                </div>
+                <div class="detail-section">
+                    <h3>Script Code</h3>
+                    <div class="detail-script"></div>
+                </div>
+                <div class="detail-buttons">
+                    <button class="url-button" onclick="window.open(this.dataset.url, '_blank')">GO TO GAME</button>
+                    <button class="script-button" data-script-id="">COPY SCRIPT</button>
+                </div>
+            </div>
+        </div>
+    </div>
+`);
+
+// Function to show script details
+function showScriptDetails(item) {
+    const modal = document.querySelector('.detail-modal-overlay');
+    const image = modal.querySelector('.detail-image');
+    const title = modal.querySelector('.detail-title');
+    const url = modal.querySelector('.detail-url');
+    const script = modal.querySelector('.detail-script');
+    const urlButton = modal.querySelector('.url-button');
+    const scriptButton = modal.querySelector('.script-button');
+
+    // Set content
+    image.src = item.image;
+    image.alt = item.name;
+    title.textContent = item.name;
+    url.textContent = item.url;
+    script.textContent = item.script;
+    urlButton.dataset.url = getRobloxGameUrl(item.url);
+    scriptButton.dataset.scriptId = item.id;
+
+    // Show modal
+    modal.style.display = 'flex';
+
+    // Add close functionality
+    const closeButton = modal.querySelector('.detail-close');
+    closeButton.onclick = () => modal.style.display = 'none';
+
+    // Close on outside click
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    };
+
+    // Add escape key listener
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            modal.style.display = 'none';
+        }
+    });
+
+    // Add copy script functionality
+    scriptButton.onclick = () => copyScript(item.id);
+}
 
 // Display items on the home page
 function displayItems(searchTerm = '') {
@@ -144,50 +253,54 @@ function displayItems(searchTerm = '') {
     if (!itemsContainer) return;
 
     const items = JSON.parse(localStorage.getItem('items') || '[]');
+    const currentUser = localStorage.getItem('profileName');
+    const deviceId = getDeviceId();
     
     itemsContainer.innerHTML = '';
     
     items
         .filter(item => item.name.toLowerCase().includes(searchTerm))
         .forEach(item => {
-            // Ensure name doesn't exceed 30 characters for display consistency
-            const displayName = item.name.length > 30 ? item.name.substring(0, 30) + '...' : item.name;
+            const displayName = formatScriptName(item.name);
+            const isOwnDevice = item.uploader?.deviceId === deviceId;
+            const isCreator = item.uploader?.name === "D3f4ult";
+            const canEdit = isOwnDevice || currentUser === "D3f4ult";
             
             const itemCard = document.createElement('div');
             itemCard.className = 'item-card';
             
             itemCard.innerHTML = `
-                <img src="${item.image}" alt="${displayName}">
+                <div class="item-image-container">
+                    <img src="${item.image}" alt="${item.name}" class="item-image">
+                </div>
                 <h3 title="${item.name}">${displayName}</h3>
+                <div class="uploader-info">
+                    <img src="${item.uploader?.picture || 'default-profile.png'}" alt="Uploader" class="uploader-picture">
+                    <span class="uploader-name ${isCreator ? 'creator-name' : ''}">${
+                        isCreator ? `by ${item.uploader?.name} 👑` : `by ${item.uploader?.name || 'Unknown'}`
+                    }</span>
+                </div>
                 <div class="card-buttons">
-                    <button class="url-button" onclick="window.open('${item.url}', '_blank')">GO TO URL</button>
+                    <button class="url-button" onclick="window.open('${getRobloxGameUrl(item.url)}', '_blank')">GO TO GAME</button>
+                    <div class="script-button-group">
                     <button class="script-button" data-script-id="${item.id}">COPY SCRIPT</button>
+                        ${canEdit ? `
+                            <button class="edit-button" onclick="editScript('${item.id}')">EDIT SCRIPT</button>
+                        ` : ''}
+                    </div>
                 </div>
             `;
             
+            // Add click handler for the entire card
+            itemCard.onclick = (e) => {
+                // Don't show details if clicking buttons
+                if (!e.target.closest('button')) {
+                    showScriptDetails(item);
+                }
+            };
+            
             itemsContainer.appendChild(itemCard);
         });
-
-    // Balance the grid with empty cards if less than 3 items
-    const itemCount = items.filter(item => item.name.toLowerCase().includes(searchTerm)).length;
-    if (itemCount > 0 && itemCount < 3) {
-        const emptyCount = 3 - itemCount;
-        for (let i = 0; i < emptyCount; i++) {
-            const emptyCard = document.createElement('div');
-            emptyCard.className = 'item-card empty';
-            emptyCard.style.visibility = 'hidden';
-            itemsContainer.appendChild(emptyCard);
-        }
-    }
-
-    // Show message if no items found
-    if (searchTerm && itemsContainer.children.length === 0) {
-        itemsContainer.innerHTML = `
-            <div class="no-results">
-                <p>No scripts found matching "${searchTerm}"</p>
-            </div>
-        `;
-    }
     
     // Add event listeners for script copy buttons
     document.querySelectorAll('.script-button').forEach(button => {
@@ -196,47 +309,6 @@ function displayItems(searchTerm = '') {
             copyScript(scriptId);
         });
     });
-}
-
-// Display items in admin section
-function displayAdminItems(searchTerm = '') {
-    const adminItemsContainer = document.getElementById('admin-items-container');
-    if (!adminItemsContainer) return;
-
-    const items = JSON.parse(localStorage.getItem('items') || '[]');
-    
-    adminItemsContainer.innerHTML = '';
-    
-    items
-        .filter(item => item.name.toLowerCase().includes(searchTerm))
-        .forEach(item => {
-            // Ensure name doesn't exceed 30 characters for display consistency
-            const displayName = item.name.length > 30 ? item.name.substring(0, 30) + '...' : item.name;
-            
-            const itemCard = document.createElement('div');
-            itemCard.className = 'item-card admin-item';
-            
-            itemCard.innerHTML = `
-                <img src="${item.image}" alt="${displayName}">
-                <h3 title="${item.name}">${displayName}</h3>
-                <p>Uploaded on: ${new Date(item.date).toLocaleDateString()}</p>
-                <div class="card-buttons">
-                    <button class="edit-button" onclick="editItem(${item.id})">EDIT</button>
-                    <button class="delete-button" onclick="deleteItem(${item.id})">DELETE</button>
-                </div>
-            `;
-            
-            adminItemsContainer.appendChild(itemCard);
-        });
-        
-    // Show message if no items found
-    if (searchTerm && adminItemsContainer.children.length === 0) {
-        adminItemsContainer.innerHTML = `
-            <div class="no-results">
-                <p>No scripts found matching "${searchTerm}"</p>
-            </div>
-        `;
-    }
 }
 
 // Delete item
@@ -248,125 +320,312 @@ function deleteItem(id) {
         
         // Update both displays
         displayItems();
-        displayAdminItems();
     }
 }
 
 // Copy script to clipboard
 function copyScript(scriptId) {
-    // Get the script content from localStorage using the ID
     const items = JSON.parse(localStorage.getItem('items') || '[]');
-    const item = items.find(item => item.id === parseInt(scriptId));
+    const item = items.find(item => item.id.toString() === scriptId.toString());
     
-    if (!item) {
-        alert('Script not found!');
-        return;
+    if (item) {
+        navigator.clipboard.writeText(item.script)
+            .catch(err => {
+                console.error('Failed to copy: ', err);
+            });
     }
-    
-    navigator.clipboard.writeText(item.script)
-        .then(() => alert('Script copied to clipboard!'))
-        .catch(err => alert('Error copying script: ' + err));
 }
 
-// Edit item function
-function editItem(id) {
-    // Get item from localStorage
+// Load saved profile data
+function loadProfile() {
+    const savedName = localStorage.getItem('profileName');
+    const savedPicture = localStorage.getItem('profilePicture');
+    
+    if (savedName) {
+        profileNameInput.value = savedName;
+        tempProfileName = savedName;
+    }
+    
+    if (savedPicture) {
+        profilePicture.src = savedPicture;
+        tempProfilePicture = savedPicture;
+    }
+    
+    updateProfileStatus();
+}
+
+// Format time remaining
+function formatTimeRemaining(milliseconds) {
+    const seconds = Math.ceil(milliseconds / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return minutes > 0 ? 
+        `${minutes} Minute${minutes > 1 ? 'n' : ''} und ${remainingSeconds} Sekunde${remainingSeconds !== 1 ? 'n' : ''}` : 
+        `${remainingSeconds} Sekunde${remainingSeconds !== 1 ? 'n' : ''}`;
+}
+
+// Save profile data
+function saveProfile() {
+    const newName = profileNameInput.value.trim();
+    const currentName = localStorage.getItem('profileName');
+    
+    // Check if name is being changed
+    if (newName !== currentName) {
+        const now = Date.now();
+        const timeSinceLastChange = now - lastNameChange;
+        
+        // Check cooldown only if not D3f4ult
+        if (currentName !== "D3f4ult" && timeSinceLastChange < NAME_CHANGE_COOLDOWN) {
+            const remainingTime = formatTimeRemaining(NAME_CHANGE_COOLDOWN - timeSinceLastChange);
+            alert(`Du kannst deinen Namen nur alle 2 Minuten ändern. Bitte warte noch ${remainingTime}.`);
+            profileNameInput.value = currentName;
+            tempProfileName = currentName;
+            return;
+        }
+        
+        // Check if name is already taken
+        if (usedNames.includes(newName)) {
+            alert('Dieser Name ist bereits vergeben. Bitte wähle einen anderen Namen.');
+            profileNameInput.value = currentName;
+            tempProfileName = currentName;
+        return;
+        }
+        
+        // Remove old name from used names if it exists
+        if (currentName) {
+            usedNames = usedNames.filter(name => name !== currentName);
+        }
+        
+        // Add new name to used names
+        usedNames.push(newName);
+        localStorage.setItem('usedNames', JSON.stringify(usedNames));
+        localStorage.setItem('lastNameChange', now.toString());
+        lastNameChange = now;
+    }
+    
+    // Save new profile data
+    localStorage.setItem('profileName', newName);
+    if (tempProfilePicture) {
+        localStorage.setItem('profilePicture', tempProfilePicture);
+    }
+    
+    // Update temporary storage
+    tempProfileName = newName;
+    
+    updateProfileStatus();
+    alert('Profil erfolgreich gespeichert!');
+}
+
+// Update profile picture
+profilePictureInput.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            profilePicture.src = e.target.result;
+            tempProfilePicture = e.target.result;
+            updateProfileStatus();
+        }
+        reader.readAsDataURL(file);
+    }
+});
+
+// Update profile name
+profileNameInput.addEventListener('input', function() {
+    tempProfileName = this.value.trim();
+    updateProfileStatus();
+});
+
+// Add click event listener to save button
+if (saveProfileBtn) {
+    saveProfileBtn.addEventListener('click', saveProfile);
+}
+
+// Check if profile is complete
+function isProfileComplete() {
+    const hasName = tempProfileName && tempProfileName.trim() !== '';
+    const hasPicture = tempProfilePicture && tempProfilePicture !== 'default-profile.png';
+    return hasName && hasPicture;
+}
+
+// Update profile status
+function updateProfileStatus() {
+    const hasName = tempProfileName && tempProfileName.trim() !== '';
+    const hasPicture = tempProfilePicture && tempProfilePicture !== 'default-profile.png';
+    
+    if (hasName && hasPicture) {
+        profileStatus.textContent = 'Profile complete';
+        profileStatus.classList.add('complete');
+    } else {
+        let missingItems = [];
+        if (!hasName) missingItems.push('name');
+        if (!hasPicture) missingItems.push('profile picture');
+        profileStatus.textContent = `Profile incomplete - Missing: ${missingItems.join(' and ')}`;
+        profileStatus.classList.remove('complete');
+    }
+}
+
+// Check profile before upload
+function checkProfileBeforeUpload() {
+    const savedName = localStorage.getItem('profileName');
+    const savedPicture = localStorage.getItem('profilePicture');
+    
+    if (!savedName || !savedPicture || savedPicture === 'default-profile.png') {
+        let missingItems = [];
+        if (!savedName) missingItems.push('name');
+        if (!savedPicture || savedPicture === 'default-profile.png') missingItems.push('profile picture');
+        alert(`Please complete your profile before uploading. You are missing: ${missingItems.join(' and ')}`);
+        window.location.href = 'profile.html';
+        return false;
+    }
+    return true;
+}
+
+// Function to edit a script
+function editScript(scriptId) {
     const items = JSON.parse(localStorage.getItem('items') || '[]');
-    const item = items.find(item => item.id === id);
+    const item = items.find(item => item.id.toString() === scriptId.toString());
+    const deviceId = getDeviceId();
+    const currentUser = localStorage.getItem('profileName');
     
-    if (!item) {
-        alert('Item not found!');
+    // Allow editing if user is D3f4ult or is the original uploader
+    if (!item || (item.uploader?.deviceId !== deviceId && currentUser !== "D3f4ult")) {
+        console.log('Unauthorized edit attempt');
         return;
     }
     
-    // Store current item being edited
-    currentEditingItem = item;
+    // Create and show edit modal
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+        <div class="modal">
+            <h2>Edit Script</h2>
+            <div class="form-group">
+                <label for="edit-name">Script Name</label>
+                <input type="text" class="modern-input" id="edit-name" value="${item.name}" placeholder="Enter script name">
+            </div>
+            <div class="form-group">
+                <label for="edit-image">Preview Image</label>
+                <input type="file" class="modern-input" id="edit-image" accept="image/*">
+                <div class="current-image">
+                    <p>Current Image:</p>
+                    <img src="${item.image}" alt="Current preview" style="max-width: 200px; margin-top: 10px; border-radius: 8px;">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="edit-url">Roblox Game ID</label>
+                <input type="number" class="modern-input" id="edit-url" value="${item.url}" placeholder="Enter Roblox Game ID">
+            </div>
+            <div class="form-group">
+                <label for="edit-script">Script Content</label>
+                <textarea class="modern-input" id="edit-script" placeholder="Enter script content" rows="5">${item.script}</textarea>
+            </div>
+            <div class="button-container">
+                <button class="delete-button" onclick="deleteScript('${item.id}')">DELETE SCRIPT</button>
+                <div class="right-buttons">
+                    <button class="cancel-button" onclick="closeModal()">CANCEL</button>
+                    <button class="save-button" onclick="saveScriptChanges('${item.id}')">SAVE CHANGES</button>
+                </div>
+            </div>
+        </div>
+    `;
     
-    // Populate form fields
-    document.getElementById('edit-name').value = item.name;
-    document.getElementById('edit-url').value = item.url;
-    document.getElementById('edit-script').value = item.script;
-    document.getElementById('current-image-preview').src = item.image;
-    
-    // Show modal
-    document.getElementById('edit-modal').style.display = 'flex';
+    document.body.appendChild(modal);
 }
 
-// Close edit modal
-function closeEditModal() {
-    document.getElementById('edit-modal').style.display = 'none';
-    currentEditingItem = null;
-}
+// Function to save script changes
+function saveScriptChanges(scriptId) {
+    const items = JSON.parse(localStorage.getItem('items') || '[]');
+    const itemIndex = items.findIndex(item => item.id.toString() === scriptId.toString());
+    const deviceId = getDeviceId();
+    const currentUser = localStorage.getItem('profileName');
+    
+    if (itemIndex === -1) return;
+    
+    // Check if user has permission to edit
+    if (items[itemIndex].uploader?.deviceId !== deviceId && currentUser !== "D3f4ult") {
+        alert('Du hast keine Berechtigung, dieses Script zu bearbeiten.');
+        return;
+    }
 
-// Save edited item
-function saveEditedItem() {
-    if (!currentEditingItem) {
-        alert('No item being edited!');
+    const newName = document.getElementById('edit-name').value;
+    
+    // Check name length
+    if (newName.length > 40) {
+        alert('Der Scriptname darf maximal 40 Zeichen lang sein.');
+        return;
+    }
+
+    // Check if new name already exists (excluding the current script)
+    if (items.some(item => item.id !== items[itemIndex].id && item.name.toLowerCase() === newName.toLowerCase())) {
+        alert('Ein Script mit diesem Namen existiert bereits. Bitte wähle einen anderen Namen.');
+        return;
+    }
+
+    // Check for profanity
+    if (containsProfanity(newName)) {
+        alert('Der Scriptname enthält unangemessene Wörter. Bitte wähle einen anderen Namen.');
         return;
     }
     
-    // Get values from form
-    const name = document.getElementById('edit-name').value;
-    const url = document.getElementById('edit-url').value;
-    const script = document.getElementById('edit-script').value;
     const imageFile = document.getElementById('edit-image').files[0];
     
-    // Get all items from localStorage
-    let items = JSON.parse(localStorage.getItem('items') || '[]');
-    const itemIndex = items.findIndex(item => item.id === currentEditingItem.id);
-    
-    if (itemIndex === -1) {
-        alert('Item not found!');
-        return;
-    }
-    
-    // If no new image is selected, just update other fields
+    // If no new image is selected, save other changes immediately
     if (!imageFile) {
-        items[itemIndex] = {
-            ...currentEditingItem,
-            name,
-            url,
-            script
-        };
+        items[itemIndex].name = newName;
+        items[itemIndex].url = document.getElementById('edit-url').value;
+        items[itemIndex].script = document.getElementById('edit-script').value;
         
-        // Save to localStorage
         localStorage.setItem('items', JSON.stringify(items));
-        
-        // Update displays
+        closeModal();
         displayItems();
-        displayAdminItems();
-        
-        // Close modal
-        closeEditModal();
-        
-        // Show confirmation
-        alert('Item updated successfully!');
         return;
     }
     
-    // If new image is selected, process it
+    // If new image is selected, process it first
     const reader = new FileReader();
     reader.onload = function(e) {
-        items[itemIndex] = {
-            ...currentEditingItem,
-            name,
-            url,
-            script,
-            image: e.target.result
-        };
+        items[itemIndex].name = newName;
+        items[itemIndex].url = document.getElementById('edit-url').value;
+        items[itemIndex].script = document.getElementById('edit-script').value;
+        items[itemIndex].image = e.target.result;
         
-        // Save to localStorage
         localStorage.setItem('items', JSON.stringify(items));
-        
-        // Update displays
+        closeModal();
         displayItems();
-        displayAdminItems();
-        
-        // Close modal
-        closeEditModal();
-        
-        // Show confirmation
-        alert('Item updated successfully!');
     };
     reader.readAsDataURL(imageFile);
+}
+
+// Function to delete a script
+function deleteScript(scriptId) {
+    const items = JSON.parse(localStorage.getItem('items') || '[]');
+    const item = items.find(item => item.id.toString() === scriptId.toString());
+    const deviceId = getDeviceId();
+    const currentUser = localStorage.getItem('profileName');
+    
+    // Allow deletion if user is D3f4ult or is the original uploader
+    if (!item || (item.uploader?.deviceId !== deviceId && currentUser !== "D3f4ult")) {
+        console.log('Unauthorized delete attempt');
+        return;
+    }
+
+    if (!confirm('Are you sure you want to delete this script?')) return;
+    
+    const newItems = items.filter(item => item.id.toString() !== scriptId.toString());
+    
+    // Save updated items
+    localStorage.setItem('items', JSON.stringify(newItems));
+    
+    // Close modal and refresh display
+    closeModal();
+    displayItems();
+}
+
+// Function to close modal
+function closeModal() {
+    const modal = document.querySelector('.modal-overlay');
+    if (modal) {
+        modal.remove();
+    }
 } 

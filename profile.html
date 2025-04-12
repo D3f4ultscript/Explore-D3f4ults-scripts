@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Manage your profile - D3f4ult's script collection">
+    <title>Profile - D3f4ult Scripts</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Animated Background -->
+    <div class="animated-bg">
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="circle"></div>
+        <div class="circle"></div>
+        <div class="line"></div>
+        <div class="line"></div>
+    </div>
+
+    <nav>
+        <a href="index.html">Home</a>
+        <a href="websites.html">Websites</a>
+        <a href="upload.html">Upload</a>
+        <a href="profile.html" class="active">Profile</a>
+    </nav>
+    
+    <div class="container">
+        <h1 class="gradient-text">Your Profile</h1>
+        <p class="subtitle">Manage your profile settings</p>
+        
+        <div class="profile-container">
+            <div class="profile-content">
+                <div class="profile-picture-container">
+                    <img id="profile-picture" src="default-profile.png" alt="Profile Picture">
+                    <input type="file" id="profile-picture-input" accept="image/*" style="display: none;">
+                    <button class="change-picture-btn" onclick="document.getElementById('profile-picture-input').click()">Change Picture</button>
+                </div>
+                <div class="profile-info">
+                    <input type="text" id="profile-name" placeholder="Enter your name" class="profile-name-input">
+                    <div class="profile-status" id="profile-status">
+                        Profile incomplete
+                    </div>
+                    <button id="save-profile-btn" class="save-profile-btn">SAVE PROFILE</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html> 

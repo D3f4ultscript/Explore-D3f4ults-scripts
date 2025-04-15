@@ -47,6 +47,24 @@ document.addEventListener('DOMContentLoaded', function() {
     
     const searchInput = document.getElementById('search-input');
     const itemForm = document.getElementById('item-form');
+    const universalToggle = document.getElementById('universal');
+    const gameIdGroup = document.getElementById('game-id-group');
+    const gameIdInput = document.getElementById('url');
+    
+    // Handle universal script toggle
+    if (universalToggle) {
+        universalToggle.addEventListener('change', function() {
+            if (this.checked) {
+                // Universal script selected - make game ID optional
+                gameIdInput.removeAttribute('required');
+                gameIdInput.placeholder = 'Optional for Universal Script';
+            } else {
+                // Normal script - game ID required
+                gameIdInput.setAttribute('required', '');
+                gameIdInput.placeholder = 'Enter Roblox Game ID';
+            }
+        });
+    }
 
     if (searchInput) {
         searchInput.addEventListener('input', function(e) {
@@ -76,6 +94,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const name = document.getElementById('name').value;
             const imageFile = document.getElementById('image').files[0];
+            const isUniversal = document.getElementById('universal').checked;
             const gameId = document.getElementById('url').value;
             const script = document.getElementById('script').value;
 
@@ -86,8 +105,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            // Validate Game ID
-            if (isNaN(gameId) || gameId <= 0) {
+            // Validate Game ID if not a universal script
+            if (!isUniversal && (isNaN(gameId) || gameId <= 0)) {
                 alert('Bitte gib eine gültige Roblox Game ID ein!');
                 return;
             }
@@ -124,6 +143,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     image: e.target.result,
                     url: gameId,
                     script: script,
+                    isUniversal: isUniversal,
                     date: new Date().toISOString(),
                     uploader: {
                         name: uploaderName,
@@ -195,7 +215,7 @@ document.body.insertAdjacentHTML('beforeend', `
                     <div class="detail-script"></div>
                 </div>
                 <div class="detail-buttons">
-                    <button class="url-button" onclick="window.open(this.dataset.url, '_blank')">GO TO GAME</button>
+                    <button class="url-button" onclick="window.open(this.dataset.url, '_blank')">GAME LINK</button>
                     <button class="script-button" data-script-id="">COPY SCRIPT</button>
                 </div>
             </div>
@@ -217,9 +237,16 @@ function showScriptDetails(item) {
     image.src = item.image;
     image.alt = item.name;
     title.textContent = item.name;
-    url.textContent = item.url;
+    url.textContent = item.isUniversal ? 'Universal Script' : item.url;
     script.textContent = item.script;
-    urlButton.dataset.url = getRobloxGameUrl(item.url);
+    
+    // Set URL button attributes and event handler
+    urlButton.removeAttribute('onclick');
+    urlButton.setAttribute('data-script-id', item.id);
+    urlButton.addEventListener('click', function(e) {
+        handleGoToGameClick(e, item);
+    });
+    
     scriptButton.dataset.scriptId = item.id;
 
     // Show modal
@@ -251,20 +278,29 @@ function showScriptDetails(item) {
 function displayItems(searchTerm = '') {
     const itemsContainer = document.getElementById('items-container');
     if (!itemsContainer) return;
-
-    const items = JSON.parse(localStorage.getItem('items') || '[]');
-    const currentUser = localStorage.getItem('profileName');
-    const deviceId = getDeviceId();
     
+    // Clear the container
     itemsContainer.innerHTML = '';
     
+    // Get items from localStorage
+    const items = JSON.parse(localStorage.getItem('items') || '[]');
+    const deviceId = getDeviceId();
+    const currentUser = localStorage.getItem('profileName');
+    
+    // Filter and sort items
     items
-        .filter(item => item.name.toLowerCase().includes(searchTerm))
+        .filter(item => !searchTerm || item.name.toLowerCase().includes(searchTerm))
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
         .forEach(item => {
             const displayName = formatScriptName(item.name);
-            const isOwnDevice = item.uploader?.deviceId === deviceId;
-            const isCreator = item.uploader?.name === "D3f4ult";
-            const canEdit = isOwnDevice || currentUser === "D3f4ult";
+
+            // Check if the current user can edit this item
+            const isCreator = 
+                (item.uploader && currentUser === "D3f4ult") || 
+                (item.uploader?.name === 'D3f4ult') || 
+                (item.uploader?.deviceId === deviceId);
+            
+            const canEdit = isCreator || currentUser === "D3f4ult";
             
             const itemCard = document.createElement('div');
             itemCard.className = 'item-card';
@@ -281,7 +317,7 @@ function displayItems(searchTerm = '') {
                     }</span>
                 </div>
                 <div class="card-buttons">
-                    <button class="url-button" onclick="window.open('${getRobloxGameUrl(item.url)}', '_blank')">GO TO GAME</button>
+                    <button class="url-button" data-script-id="${item.id}">GAME LINK</button>
                     <div class="script-button-group">
                     <button class="script-button" data-script-id="${item.id}">COPY SCRIPT</button>
                         ${canEdit ? `
@@ -307,6 +343,18 @@ function displayItems(searchTerm = '') {
         button.addEventListener('click', function() {
             const scriptId = this.getAttribute('data-script-id');
             copyScript(scriptId);
+        });
+    });
+
+    // Add event listeners for Go To Game buttons
+    document.querySelectorAll('.url-button').forEach(button => {
+        button.addEventListener('click', function(e) {
+            const scriptId = this.getAttribute('data-script-id');
+            const items = JSON.parse(localStorage.getItem('items') || '[]');
+            const item = items.find(item => item.id.toString() === scriptId.toString());
+            if (item) {
+                handleGoToGameClick(e, item);
+            }
         });
     });
 }
@@ -512,25 +560,47 @@ function editScript(scriptId) {
                     <img src="${item.image}" alt="Current preview" style="max-width: 200px; margin-top: 10px; border-radius: 8px;">
                 </div>
             </div>
+            <div class="form-group toggle-container">
+                <label for="edit-universal">Universal Script</label>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="edit-universal" class="toggle-input" ${item.isUniversal ? 'checked' : ''}>
+                    <label for="edit-universal" class="toggle-label"></label>
+                </div>
+            </div>
             <div class="form-group">
                 <label for="edit-url">Roblox Game ID</label>
-                <input type="number" class="modern-input" id="edit-url" value="${item.url}" placeholder="Enter Roblox Game ID">
+                <input type="number" class="modern-input" id="edit-url" value="${item.url}" placeholder="${item.isUniversal ? 'Optional for Universal Script' : 'Enter Roblox Game ID'}" ${item.isUniversal ? '' : 'required'}>
             </div>
             <div class="form-group">
                 <label for="edit-script">Script Content</label>
                 <textarea class="modern-input" id="edit-script" placeholder="Enter script content" rows="5">${item.script}</textarea>
             </div>
             <div class="button-container">
-                <button class="delete-button" onclick="deleteScript('${item.id}')">DELETE SCRIPT</button>
+                <button class="delete-button" onclick="deleteScript('${item.id}')">Delete</button>
                 <div class="right-buttons">
-                    <button class="cancel-button" onclick="closeModal()">CANCEL</button>
-                    <button class="save-button" onclick="saveScriptChanges('${item.id}')">SAVE CHANGES</button>
+                    <button class="cancel-button" onclick="closeModal()">Cancel</button>
+                    <button class="save-button" onclick="saveScriptChanges('${item.id}')">Save</button>
                 </div>
             </div>
         </div>
     `;
     
     document.body.appendChild(modal);
+    currentEditingItem = item;
+    
+    // Add event listener for universal toggle in edit modal
+    document.getElementById('edit-universal').addEventListener('change', function() {
+        const urlInput = document.getElementById('edit-url');
+        if (this.checked) {
+            // Universal script selected - make game ID optional
+            urlInput.removeAttribute('required');
+            urlInput.placeholder = 'Optional for Universal Script';
+        } else {
+            // Normal script - game ID required
+            urlInput.setAttribute('required', '');
+            urlInput.placeholder = 'Enter Roblox Game ID';
+        }
+    });
 }
 
 // Function to save script changes
@@ -569,11 +639,20 @@ function saveScriptChanges(scriptId) {
     }
     
     const imageFile = document.getElementById('edit-image').files[0];
+    const isUniversal = document.getElementById('edit-universal').checked;
+    const gameId = document.getElementById('edit-url').value;
+    
+    // Validate Game ID if not a universal script
+    if (!isUniversal && (isNaN(gameId) || gameId <= 0)) {
+        alert('Bitte gib eine gültige Roblox Game ID ein!');
+        return;
+    }
     
     // If no new image is selected, save other changes immediately
     if (!imageFile) {
         items[itemIndex].name = newName;
-        items[itemIndex].url = document.getElementById('edit-url').value;
+        items[itemIndex].url = gameId;
+        items[itemIndex].isUniversal = isUniversal;
         items[itemIndex].script = document.getElementById('edit-script').value;
         
         localStorage.setItem('items', JSON.stringify(items));
@@ -586,7 +665,8 @@ function saveScriptChanges(scriptId) {
     const reader = new FileReader();
     reader.onload = function(e) {
         items[itemIndex].name = newName;
-        items[itemIndex].url = document.getElementById('edit-url').value;
+        items[itemIndex].url = gameId;
+        items[itemIndex].isUniversal = isUniversal;
         items[itemIndex].script = document.getElementById('edit-script').value;
         items[itemIndex].image = e.target.result;
         
@@ -627,5 +707,52 @@ function closeModal() {
     const modal = document.querySelector('.modal-overlay');
     if (modal) {
         modal.remove();
+    }
+}
+
+// Function to handle Go To Game click for universal scripts
+function handleGoToGameClick(e, item) {
+    if (item.isUniversal) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Create modal overlay
+        const modalOverlay = document.createElement('div');
+        modalOverlay.className = 'modal-overlay';
+        modalOverlay.style.display = 'flex';
+        
+        // Create modal
+        const modal = document.createElement('div');
+        modal.className = 'universal-modal';
+        modal.innerHTML = `
+            <h3>Universal Script</h3>
+            <p>This is a universal script that works across multiple Roblox games.</p>
+            <button id="universal-ok">OK</button>
+        `;
+        
+        modalOverlay.appendChild(modal);
+        document.body.appendChild(modalOverlay);
+        
+        // Handle OK button click
+        document.getElementById('universal-ok').addEventListener('click', function() {
+            document.body.removeChild(modalOverlay);
+        });
+        
+        // Close on outside click
+        modalOverlay.addEventListener('click', function(event) {
+            if (event.target === modalOverlay) {
+                document.body.removeChild(modalOverlay);
+            }
+        });
+        
+        // Close on ESC key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape' && document.body.contains(modalOverlay)) {
+                document.body.removeChild(modalOverlay);
+            }
+        });
+    } else {
+        // For normal scripts, open the Roblox game URL
+        window.open(getRobloxGameUrl(item.url), '_blank');
     }
 } 
